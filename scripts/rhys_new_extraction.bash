@@ -42,34 +42,15 @@ check_exists "${FIXR_GRAPH_INDEXER}" "FixrGraphIndexer folder"
 check_exists "${FIXR_GRAPH_ISO_BIN}" "FixrGraphIso binary"
 check_exists "${FIXR_COMMUNITY_DETECTION}" "FixrCommunityDetection path"
 check_exists "${FIXR_COMMUNITY_DETECTION_JAR}" "FixrCommunityDetection jar does not exist: did you run sbt assembly there?"
-check_exists "${REPO_LIST}" "List of repositories"
 check_exists "${SPARK_SUBMIT_PATH}" "Spark submit executable"
-
-check_exists "${BUILDABLE_REPO_LIST}" "List of buildable repos"
-check_exists "${BUILDABLE_REPO_PATH}" "Directory containing built repos"
 
 FIXR_GRAPH_PYTHON="$(readlink -f "${script_dir}/../python/fixrgraph/")"
 check_exists "${FIXR_GRAPH_PYTHON}" "Python package"
 
-
-if [ -d "${OUT_DIR}" ] ; then
-    echo "${OUT_DIR} already exists!"
-    exit 1
-fi
 mkdir -p "${OUT_DIR}"
 
 
 OUT_LOG=${OUT_DIR}/out_log.txt
-
-# Extract the graphs
-echo "Extracting graphs from ${REPO_LIST}..."
-pushd .
-cd ${OUT_DIR}
-echo "bash ${FIXR_GRAPH_PYTHON}/extraction/run_script.bash ${OUT_DIR} ${REPO_LIST} ${FIXR_GRAPH_EXTRACTOR_JAR} ${BUILDABLE_REPO_LIST} ${BUILDASBLE_REPO_PATH} &>> ${OUT_LOG}" &>> ${OUT_LOG}
-bash ${FIXR_GRAPH_PYTHON}/extraction/run_script.bash ${OUT_DIR} ${REPO_LIST} ${FIXR_GRAPH_EXTRACTOR_JAR} ${BUILDABLE_REPO_LIST} ${BUILDABLE_REPO_PATH} &>> ${OUT_LOG}
-res=$?
-popd
-check_res "${res}" "Extract graphs of ${REPO_LIST}"
 
 echo "Filling graph dbs..."
 echo "python ${FIXR_GRAPH_PYTHON}/db/scripts/process_graphs.py -g ${OUT_DIR}/graphs -d ${OUT_DIR}/graphs_db.db &>> ${OUT_LOG}"   &>> ${OUT_LOG}
@@ -109,8 +90,9 @@ check_res "$?" "Generating html pages"
 echo "Running community detection..."
 # Generate the list of isomorphisms
 echo "Extracting isomorphism..."
-echo "python ${FIXR_GRAPH_PYTHON}/db/scripts/filter_isos.py -d ${OUT_DIR}/graphs_db.db -o ${OUT_DIR}/iso_list.txt -w 10 &>> ${OUT_LOG}" &>> ${OUT_LOG}
-python ${FIXR_GRAPH_PYTHON}/db/scripts/filter_isos.py -d ${OUT_DIR}/graphs_db.db -o ${OUT_DIR}/iso_list.txt -w 10 &>> ${OUT_LOG}
+echo "(grep -r --include \*.iso.bin beginTransaction ${OUT_DIR}/iso | awk -F ' ' '{print $3}' | sort) > ${OUT_DIR}/iso_list.txt"
+(grep -r --include \*.iso.bin beginTransaction ${OUT_DIR}/iso | awk -F ' ' '{print $3}' | sort) > ${OUT_DIR}/iso_list.txt
+check_res "$?" "Extracting isomorphism"
 check_res "$?" "Extracting isomorphism"
 
 # Run the community detection
@@ -118,4 +100,3 @@ echo "Computing communities..."
 echo "${SPARK_SUBMIT_PATH} --class edu.colorado.plv.fixr.community.Main ${FIXR_COMMUNITY_DETECTION_JAR} -w iso -i ${OUT_DIR}/iso -f ${OUT_DIR}/iso_list.txt -o ${OUT_DIR}/communities"
 ${SPARK_SUBMIT_PATH} --class edu.colorado.plv.fixr.community.Main ${FIXR_COMMUNITY_DETECTION_JAR} -w iso -i ${OUT_DIR}/iso -f ${OUT_DIR}/iso_list.txt -o ${OUT_DIR}/communities &>> ${OUT_LOG}
 check_res "$?" "Community detection"
-
